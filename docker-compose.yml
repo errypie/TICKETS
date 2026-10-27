@@ -1,0 +1,31 @@
+services:
+  tickets:
+    build: .
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # Одноразовый сидер: кладёт флаг в тикет от имени случайного пользователя.
+  # Тикет виден только в админ-панели (/admin/appeals), т.к. у игрока другой cookie.
+  # Скрипт живёт в отдельном контейнере — в стенде его нет (нельзя подсмотреть cookie).
+  seeder:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      - tickets
+    environment:
+      FLAG: ${FLAG:-errypie{REPLACE_WITH_YOUR_FLAG}}
+    restart: "no"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        for i in $$(seq 1 40); do
+          curl -sf -o /dev/null http://tickets:8080/ && break
+          sleep 2
+        done
+        curl -s -o /dev/null \
+          -b "userId=$$(cat /proc/sys/kernel/random/uuid)" \
+          --data-urlencode "subject=Восстановление доступа к SCADA" \
+          --data-urlencode "content=$$FLAG" \
+          http://tickets:8080/create
+        echo "[seeder] flag ticket created"
